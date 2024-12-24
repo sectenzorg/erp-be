@@ -6,7 +6,8 @@ on:
       - main  # Trigger deployment on push to main branch
 
 jobs:
-  build-push-deploy-to-ecr-ecs:
+  # Job 1: Build Docker image and push to Amazon ECR
+  build:
     runs-on: ubuntu-latest
 
     steps:
@@ -45,12 +46,58 @@ jobs:
           VERSION_TAG="${GITHUB_SHA:0:7}"  # Short SHA (first 7 characters)
           docker buildx build --platform linux/arm64 -t $ECR_REGISTRY/$ECR_REPOSITORY:$VERSION_TAG -f .devops/Dockerfile --push .
 
-      # Step 5: Download the current task definition from Amazon ECS
+  # Job 2: Security scanning of Docker image
+  security:
+    runs-on: ubuntu-latest
+    needs: build  # This job depends on the build job
+
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      # Step 2: Install Trivy for Docker image scanning
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh
+
+      # Step 3: Scan Docker image for vulnerabilities and save result as HTML
+      - name: Scan Docker image for vulnerabilities and generate HTML report
+        run: |
+          IMAGE_URI="${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:latest"
+          trivy image --no-progress --severity HIGH,CRITICAL --output trivy-report.html $IMAGE_URI
+
+      # Step 4: Upload Trivy HTML report as artifact
+      - name: Upload Trivy HTML report as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: trivy-vulnerability-report
+          path: trivy-report.html
+
+  # Job 3: Update ECS task definition and deploy
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [build, security]  # This job depends on both build and security jobs
+
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      # Step 2: Configure AWS credentials
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-southeast-3
+
+      # Step 3: Download the current task definition from Amazon ECS
       - name: Download task definition
         run: |
           aws ecs describe-task-definition --task-definition erp-be-development --query "taskDefinition" > task-definition.json
 
-      # Step 6: Update the task definition with the new image
+      # Step 4: Update the task definition with the new image
       - name: Fill in new image ID in task definition
         id: task-def
         uses: aws-actions/amazon-ecs-render-task-definition@v1
@@ -59,7 +106,7 @@ jobs:
           container-name: erp-be-development
           image: ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:latest
 
-      # Step 7: Deploy the updated task definition to ECS
+      # Step 5: Deploy the updated task definition to ECS
       - name: Deploy Amazon ECS task definition
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
