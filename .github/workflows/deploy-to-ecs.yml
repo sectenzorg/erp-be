@@ -39,12 +39,12 @@ jobs:
           # Set up buildx
           docker buildx create --use
           
-          # Build and push 'latest' tag
-          docker buildx build --platform linux/arm64 -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f .devops/Dockerfile --push .
+          # Build and push 'latest' tag for linux/amd64 platform
+          docker buildx build --platform linux/amd64 -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f .devops/Dockerfile --push .
           
-          # Build and push short Git commit SHA tag
+          # Build and push short Git commit SHA tag for linux/amd64 platform
           VERSION_TAG="${GITHUB_SHA:0:7}"  # Short SHA (first 7 characters)
-          docker buildx build --platform linux/arm64 -t $ECR_REGISTRY/$ECR_REPOSITORY:$VERSION_TAG -f .devops/Dockerfile --push .
+          docker buildx build --platform linux/amd64 -t $ECR_REGISTRY/$ECR_REPOSITORY:$VERSION_TAG -f .devops/Dockerfile --push .
 
       # Step 5: Run Trivy vulnerability scanner on the Docker image and generate table report
       - name: Run Trivy vulnerability scanner
