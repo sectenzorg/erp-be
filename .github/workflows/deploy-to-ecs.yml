@@ -7,7 +7,7 @@ on:
 
 jobs:
   # Job: Build Docker image, scan for vulnerabilities, and push to Amazon ECR
-  build-and-security:
+  build-scan:
     runs-on: ubuntu-latest
 
     steps:
@@ -46,29 +46,29 @@ jobs:
           VERSION_TAG="${GITHUB_SHA:0:7}"  # Short SHA (first 7 characters)
           docker buildx build --platform linux/arm64 -t $ECR_REGISTRY/$ECR_REPOSITORY:$VERSION_TAG -f .devops/Dockerfile --push .
 
-      # Step 5: Run Trivy vulnerability scanner on the Docker image and generate HTML report
+      # Step 5: Run Trivy vulnerability scanner on the Docker image and generate table report
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: '${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:latest'
-          format: 'html'
+          format: 'table'  # Use table format for vulnerabilities
           exit-code: '1'  # Exit with error if vulnerabilities are found
           ignore-unfixed: true
           vuln-type: 'os,library'
-          severity: 'CRITICAL,HIGH'
-          output: 'trivy-report.html'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          output: 'trivy-report.json'  # Output to a JSON file instead of HTML
 
-      # Step 6: Upload Trivy HTML report as artifact
-      - name: Upload Trivy HTML report as artifact
+      # Step 6: Upload Trivy JSON report as artifact
+      - name: Upload Trivy JSON report as artifact
         uses: actions/upload-artifact@v3
         with:
           name: trivy-vulnerability-report
-          path: trivy-report.html
+          path: trivy-report.json
 
   # Job: Update ECS task definition and deploy
   deploy:
     runs-on: ubuntu-latest
-    needs: build-and-security  # This job depends on the build-and-security job
+    needs: build-scan  # This job depends on the build-scan job
 
     steps:
       # Step 1: Checkout code
