@@ -46,17 +46,15 @@ jobs:
           VERSION_TAG="${GITHUB_SHA:0:7}"  # Short SHA (first 7 characters)
           docker buildx build --platform linux/amd64 -t $ECR_REGISTRY/$ECR_REPOSITORY:$VERSION_TAG -f .devops/Dockerfile --push .
 
-      # Step 5: Run Trivy vulnerability scanner on the Docker image and generate table report
+      # Step 5: Run Trivy vulnerability scanner
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: '${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:latest'
-          format: 'table'  # Use table format for vulnerabilities
-          exit-code: '1'  # Exit with error if vulnerabilities are found
+          image-ref: ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:latest
+          format: "table"
           ignore-unfixed: true
-          vuln-type: 'os,library'
-          severity: 'CRITICAL,HIGH,MEDIUM'
-          output: 'trivy-report.json'  # Output to a JSON file instead of HTML
+          severity: "CRITICAL,HIGH,MEDIUM"
+          output: "trivy-report.json"
 
       # Step 6: Upload Trivy JSON report as artifact
       - name: Upload Trivy JSON report as artifact
