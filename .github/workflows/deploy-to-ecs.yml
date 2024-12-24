@@ -1,4 +1,4 @@
-name: Deploy to Amazon ECS
+name: Build, Scan and Deploy to Amazon ECS
 
 on:
   push:
@@ -6,8 +6,8 @@ on:
       - main  # Trigger deployment on push to main branch
 
 jobs:
-  # Job 1: Build Docker image and push to Amazon ECR
-  build:
+  # Job: Build Docker image, scan for vulnerabilities, and push to Amazon ECR
+  build-and-security:
     runs-on: ubuntu-latest
 
     steps:
@@ -46,38 +46,29 @@ jobs:
           VERSION_TAG="${GITHUB_SHA:0:7}"  # Short SHA (first 7 characters)
           docker buildx build --platform linux/arm64 -t $ECR_REGISTRY/$ECR_REPOSITORY:$VERSION_TAG -f .devops/Dockerfile --push .
 
-  # Job 2: Security scanning of Docker image
-  security:
-    runs-on: ubuntu-latest
-    needs: build  # This job depends on the build job
+      # Step 5: Run Trivy vulnerability scanner on the Docker image and generate HTML report
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: '${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:latest'
+          format: 'html'
+          exit-code: '1'  # Exit with error if vulnerabilities are found
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+          output: 'trivy-report.html'
 
-    steps:
-      # Step 1: Checkout code
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      # Step 2: Install Trivy for Docker image scanning
-      - name: Install Trivy
-        run: |
-          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh
-
-      # Step 3: Scan Docker image for vulnerabilities and save result as HTML
-      - name: Scan Docker image for vulnerabilities and generate HTML report
-        run: |
-          IMAGE_URI="${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:latest"
-          trivy image --no-progress --severity HIGH,CRITICAL --output trivy-report.html $IMAGE_URI
-
-      # Step 4: Upload Trivy HTML report as artifact
+      # Step 6: Upload Trivy HTML report as artifact
       - name: Upload Trivy HTML report as artifact
         uses: actions/upload-artifact@v3
         with:
           name: trivy-vulnerability-report
           path: trivy-report.html
 
-  # Job 3: Update ECS task definition and deploy
+  # Job: Update ECS task definition and deploy
   deploy:
     runs-on: ubuntu-latest
-    needs: [build, security]  # This job depends on both build and security jobs
+    needs: build-and-security  # This job depends on the build-and-security job
 
     steps:
       # Step 1: Checkout code
