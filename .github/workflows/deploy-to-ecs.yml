@@ -56,9 +56,9 @@ jobs:
           severity: "CRITICAL,HIGH,MEDIUM"
           output: "trivy-report.json"
 
-      # Step 6: Upload Trivy JSON report as artifact
+      # Step 6: Upload Trivy JSON report as artifact (v4)
       - name: Upload Trivy JSON report as artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: trivy-vulnerability-report
           path: trivy-report.json
@@ -86,7 +86,14 @@ jobs:
         run: |
           aws ecs describe-task-definition --task-definition erp-be-development --query "taskDefinition" > task-definition.json
 
-      # Step 4: Update the task definition with the new image
+      # Step 4: Upload task definition as artifact (v4)
+      - name: Upload Task Definition as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecs-task-definition
+          path: task-definition.json
+
+      # Step 5: Update the task definition with the new image
       - name: Fill in new image ID in task definition
         id: task-def
         uses: aws-actions/amazon-ecs-render-task-definition@v1
@@ -95,7 +102,7 @@ jobs:
           container-name: erp-be-development
           image: ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:latest
 
-      # Step 5: Deploy the updated task definition to ECS
+      # Step 6: Deploy the updated task definition to ECS
       - name: Deploy Amazon ECS task definition
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
